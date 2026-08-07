@@ -18,9 +18,23 @@ Most realtime demos broadcast an object and assume every client receives every
 message. This project instead makes ordering, idempotency, recovery, slow
 consumers, and honest consistency guarantees part of the design.
 
-The implementation is delivered in independently verified slices. The initial
-foundation establishes the quality gates and architectural boundaries before
-the protocol, gateway, and React application are introduced.
+The implementation is delivered in independently verified slices. The
+foundation and framework-independent collaboration core are in place; the
+gateway and React application remain separate later slices.
+
+## Implemented core
+
+- strict Zod contracts for boards, commands, canonical events, and every wire message
+- server sequence and replay-range validation at the runtime boundary
+- immutable release-board transitions with explicit domain errors
+- generic optimistic sync engine with injected transport and persistence
+- confirmed state plus ordered pending intent as the only optimistic projection source
+- reconnect hydration, idempotent duplicate handling, rejection rebase, and gap recovery
+- serialized persistence writes so a slower old save cannot replace newer state
+- deterministic unit and property tests with enforced coverage thresholds
+
+Read the [protocol and sync engine contract](docs/protocol-and-sync-engine.md)
+for the public interfaces and recovery rules.
 
 ## Target architecture
 
@@ -73,9 +87,10 @@ docker compose up -d postgres
 ## Repository layout
 
 ```text
-apps/       Fastify gateway and React release room in later slices
-packages/   Runtime protocol and framework-independent sync engine
-docs/       Architecture, guarantees, and verification evidence
+apps/                Fastify gateway and React release room in later slices
+packages/protocol/   Runtime schemas and release-board transitions
+packages/sync-engine Framework-independent optimistic state and recovery
+docs/                Architecture, guarantees, and verification evidence
 ```
 
 ## License
