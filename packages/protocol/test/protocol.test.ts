@@ -65,6 +65,12 @@ describe('client message contracts', () => {
       selectedCardId: ids.card,
       editingCardId: null,
     },
+    {
+      type: 'replay-request',
+      protocolVersion,
+      boardId: ids.board,
+      afterSeq: 3,
+    },
     { type: 'pong', protocolVersion, nonce: 'heartbeat-1' },
   ])('parses $type messages', (message) => {
     expect(parseClientMessage(message)).toEqual(message)

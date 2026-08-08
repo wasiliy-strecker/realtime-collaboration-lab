@@ -54,6 +54,14 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
     .strict(),
   z
     .object({
+      type: z.literal('replay-request'),
+      protocolVersion: z.literal(protocolVersion),
+      boardId: boardIdSchema,
+      afterSeq: serverSequenceSchema,
+    })
+    .strict(),
+  z
+    .object({
       type: z.literal('pong'),
       protocolVersion: z.literal(protocolVersion),
       nonce: z.string().min(1).max(120),

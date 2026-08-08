@@ -1,7 +1,8 @@
 # Architecture and consistency boundaries
 
-This document defines the target system before product behavior is added. It
-exists to keep later implementation choices aligned with explicit guarantees.
+This document defines the implemented collaboration boundaries and the target
+React integration. It keeps later implementation choices aligned with explicit
+guarantees.
 
 ## Ownership
 
@@ -17,7 +18,7 @@ exists to keep later implementation choices aligned with explicit guarantees.
 The browser never becomes authoritative because it remained connected. The
 gateway never treats its process memory or a notification as durable state.
 
-## Intended write path
+## Write path
 
 Each command carries a client-generated operation ID and the last server
 sequence observed by that client. The gateway locks the board row, returns the
@@ -29,7 +30,7 @@ The sequence reported by the client is diagnostic context rather than a claim
 to authority. Commands that remain valid may be serialized after newer work;
 commands whose target no longer exists are rejected explicitly.
 
-## Intended read and recovery path
+## Read and recovery path
 
 A client persists its confirmed snapshot and sequence separately from pending
 commands. On reconnect it presents that sequence. The gateway replays later
