@@ -4,3 +4,7 @@ packages:
 
 allowBuilds:
   esbuild: true
+
+minimumReleaseAgeExclude:
+  - '@types/pg@8.21.0'
+  - ws@8.21.3

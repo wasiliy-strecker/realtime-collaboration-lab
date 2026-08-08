@@ -31,10 +31,16 @@ gateway and React application remain separate later slices.
 - confirmed state plus ordered pending intent as the only optimistic projection source
 - reconnect hydration, idempotent duplicate handling, rejection rebase, and gap recovery
 - serialized persistence writes so a slower old save cannot replace newer state
+- Fastify gateway with origin-checked, cookie-authenticated WebSocket upgrades
+- atomic PostgreSQL board snapshots and append-only, gap-free operation sequences
+- cross-instance operation hints through transactional `LISTEN/NOTIFY`
+- ephemeral presence, heartbeats, command rate limits, and slow-consumer protection
 - deterministic unit and property tests with enforced coverage thresholds
 
 Read the [protocol and sync engine contract](docs/protocol-and-sync-engine.md)
-for the public interfaces and recovery rules.
+for the public interfaces and recovery rules, then the
+[gateway and PostgreSQL contract](docs/gateway-and-postgres.md) for server-side
+coordination.
 
 ## Target architecture
 
@@ -49,8 +55,8 @@ flowchart LR
     WS -->|ack and applied operation| Engine
 ```
 
-PostgreSQL will own durable board state and server ordering. `LISTEN/NOTIFY`
-will only wake gateway instances; clients and gateways recover missed messages
+PostgreSQL owns durable board state and server ordering. `LISTEN/NOTIFY` only
+wakes gateway instances; clients and gateways recover missed messages
 from the durable operations log.
 
 ## Planned guarantees
@@ -76,18 +82,23 @@ pnpm install --frozen-lockfile
 pnpm verify
 ```
 
-Start the local PostgreSQL dependency when a later integration slice requires
-it:
+Start PostgreSQL and the gateway:
 
 ```bash
 cp .env.example .env
 docker compose up -d postgres
+pnpm dev:gateway
 ```
+
+The gateway listens on `http://127.0.0.1:3001`. `POST /api/demo-sessions`
+creates a signed HTTP-only demo session, `GET /api/boards/{boardId}` exposes the
+confirmed snapshot, and `/ws` carries the ordered collaboration protocol.
 
 ## Repository layout
 
 ```text
-apps/                Fastify gateway and React release room in later slices
+apps/gateway/        Fastify, WebSocket, PostgreSQL, and presence coordination
+apps/web/            React release room in a later slice
 packages/protocol/   Runtime schemas and release-board transitions
 packages/sync-engine Framework-independent optimistic state and recovery
 docs/                Architecture, guarantees, and verification evidence

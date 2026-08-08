@@ -12,7 +12,7 @@ Security fixes target the latest tagged release and the `main` branch.
 
 ## Demo boundary
 
-Local Compose credentials are intentionally non-production values. The later
+Local Compose credentials are intentionally non-production values. The signed
 demo-session mechanism is not intended to replace an identity provider. Public
 deployments must use TLS, a strong session secret, strict origin allowlists, and
 network controls appropriate to their environment.

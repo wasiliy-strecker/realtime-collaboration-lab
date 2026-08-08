@@ -1,0 +1,23 @@
+{
+  "name": "@realtime-collaboration/gateway",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Fastify and PostgreSQL collaboration gateway",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@fastify/cookie": "11.1.2",
+    "@fastify/websocket": "11.3.0",
+    "@realtime-collaboration/protocol": "workspace:*",
+    "fastify": "5.11.2",
+    "pg": "8.22.0",
+    "ws": "8.21.3",
+    "zod": "4.4.3"
+  }
+}
