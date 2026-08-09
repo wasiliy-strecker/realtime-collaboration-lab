@@ -31,17 +31,30 @@ describe('Fastify gateway', () => {
       url: '/api/demo-sessions',
       payload: { displayName: 'Ada' },
     })
+    const cookie = session.headers['set-cookie']
+    const restored = await app.inject({
+      method: 'GET',
+      url: '/api/demo-session',
+      headers: { cookie },
+    })
+    const anonymous = await app.inject({ method: 'GET', url: '/api/demo-session' })
 
     expect(health.json()).toEqual({ status: 'ok' })
     expect(invalid).toMatchObject({ statusCode: 400 })
     expect(invalid.headers['content-type']).toContain('application/problem+json')
     expect(session).toMatchObject({ statusCode: 200 })
+    expect(session.json()).toMatchObject({
+      displayName: 'Ada',
+      boardId: ids.board,
+    })
     expect(session.cookies[0]).toMatchObject({
       name: 'collaboration_session',
       httpOnly: true,
       sameSite: 'Strict',
       path: '/',
     })
+    expect(restored.json()).toEqual(session.json())
+    expect(anonymous.statusCode).toBe(401)
 
     await app.close()
     expect(notifier.stopCalls).toBe(1)

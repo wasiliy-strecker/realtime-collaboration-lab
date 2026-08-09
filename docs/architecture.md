@@ -1,14 +1,15 @@
 # Architecture and consistency boundaries
 
-This document defines the implemented collaboration boundaries and the target
-React integration. It keeps later implementation choices aligned with explicit
-guarantees.
+This document defines the implemented collaboration boundaries from React
+interaction through PostgreSQL durability. It keeps later implementation
+choices aligned with explicit guarantees.
 
 ## Ownership
 
 | Component         | Owns                                                                 |
 | ----------------- | -------------------------------------------------------------------- |
 | React application | presentation, accessible interaction, and connection feedback        |
+| Browser adapters  | WebSocket lifecycle, local persistence, reconnect, and presence      |
 | Sync engine       | confirmed state, pending intent, optimistic projection, and recovery |
 | Runtime protocol  | validated client and server message shapes                           |
 | Fastify gateway   | sessions, command validation, backpressure, and socket lifecycle     |
@@ -36,6 +37,11 @@ A client persists its confirmed snapshot and sequence separately from pending
 commands. On reconnect it presents that sequence. The gateway replays later
 operations in order, and the client reapplies still-pending intent after every
 confirmed change.
+
+React reads one immutable sync snapshot through `useSyncExternalStore`. It does
+not mirror confirmed or optimistic board state in component state. The browser
+adapter validates persisted envelopes and every server frame before either can
+reach the engine.
 
 Gateways use PostgreSQL notifications to notice work committed by peers. A
 notification can be delayed, coalesced, or lost. Any observed sequence jump

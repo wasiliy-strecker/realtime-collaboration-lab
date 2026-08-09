@@ -1,0 +1,28 @@
+{
+  "name": "@realtime-collaboration/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Optimistic React release room for the realtime collaboration lab",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit && vite build",
+    "dev": "vite --host 127.0.0.1",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@dnd-kit/core": "6.3.1",
+    "@dnd-kit/sortable": "10.0.0",
+    "@dnd-kit/utilities": "3.2.2",
+    "@realtime-collaboration/protocol": "workspace:*",
+    "@realtime-collaboration/react-sync": "workspace:*",
+    "@realtime-collaboration/sync-engine": "workspace:*",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "6.0.5",
+    "vite": "8.2.1"
+  }
+}

@@ -19,8 +19,9 @@ message. This project instead makes ordering, idempotency, recovery, slow
 consumers, and honest consistency guarantees part of the design.
 
 The implementation is delivered in independently verified slices. The
-foundation and framework-independent collaboration core are in place; the
-gateway and React application remain separate later slices.
+framework-independent core, durable gateway, reusable React binding, and
+optimistic release-room application are now integrated without collapsing
+their ownership boundaries.
 
 ## Implemented core
 
@@ -35,12 +36,18 @@ gateway and React application remain separate later slices.
 - atomic PostgreSQL board snapshots and append-only, gap-free operation sequences
 - cross-instance operation hints through transactional `LISTEN/NOTIFY`
 - ephemeral presence, heartbeats, command rate limits, and slow-consumer protection
+- a tear-free `useSyncEngine` React binding built on `useSyncExternalStore`
+- a runtime-validated browser transport with ping/pong, replay, and explicit rejection handling
+- validated local persistence for confirmed state and queued offline intent
+- bounded reconnect with jitter, online recovery, and per-tab client identity
+- an accessible release board with optimistic editing, assignment, readiness, and drag-and-drop
 - deterministic unit and property tests with enforced coverage thresholds
 
 Read the [protocol and sync engine contract](docs/protocol-and-sync-engine.md)
 for the public interfaces and recovery rules, then the
 [gateway and PostgreSQL contract](docs/gateway-and-postgres.md) for server-side
-coordination.
+coordination, and the [React client contract](docs/react-client.md) for browser
+state, transport, and accessibility boundaries.
 
 ## Target architecture
 
@@ -59,7 +66,7 @@ PostgreSQL owns durable board state and server ordering. `LISTEN/NOTIFY` only
 wakes gateway instances; clients and gateways recover missed messages
 from the durable operations log.
 
-## Planned guarantees
+## Implemented guarantees
 
 - client-generated operation IDs make command retries idempotent
 - each board receives one monotonic server sequence
@@ -82,7 +89,7 @@ pnpm install --frozen-lockfile
 pnpm verify
 ```
 
-Start PostgreSQL and the gateway:
+Start PostgreSQL, the gateway, and the React application:
 
 ```bash
 cp .env.example .env
@@ -90,16 +97,24 @@ docker compose up -d postgres
 pnpm dev:gateway
 ```
 
-The gateway listens on `http://127.0.0.1:3001`. `POST /api/demo-sessions`
-creates a signed HTTP-only demo session, `GET /api/boards/{boardId}` exposes the
-confirmed snapshot, and `/ws` carries the ordered collaboration protocol.
+In a second terminal:
+
+```bash
+pnpm dev:web
+```
+
+Open `http://127.0.0.1:5173`. Vite proxies API and WebSocket traffic to the
+gateway on `http://127.0.0.1:3001`. `POST /api/demo-sessions` creates a signed
+HTTP-only demo session, `GET /api/demo-session` restores its public identity,
+and `/ws` carries the ordered collaboration protocol.
 
 ## Repository layout
 
 ```text
 apps/gateway/        Fastify, WebSocket, PostgreSQL, and presence coordination
-apps/web/            React release room in a later slice
+apps/web/            React release room, browser transport, persistence, and reconnect
 packages/protocol/   Runtime schemas and release-board transitions
+packages/react-sync/ Tear-free React adapter for the headless sync engine
 packages/sync-engine Framework-independent optimistic state and recovery
 docs/                Architecture, guarantees, and verification evidence
 ```
