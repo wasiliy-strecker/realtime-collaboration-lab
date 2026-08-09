@@ -42,12 +42,15 @@ their ownership boundaries.
 - bounded reconnect with jitter, online recovery, and per-tab client identity
 - an accessible release board with optimistic editing, assignment, readiness, and drag-and-drop
 - deterministic unit and property tests with enforced coverage thresholds
+- Chromium failure scenarios against the real gateway and PostgreSQL operation log
 
 Read the [protocol and sync engine contract](docs/protocol-and-sync-engine.md)
 for the public interfaces and recovery rules, then the
 [gateway and PostgreSQL contract](docs/gateway-and-postgres.md) for server-side
 coordination, and the [React client contract](docs/react-client.md) for browser
-state, transport, and accessibility boundaries.
+state, transport, and accessibility boundaries. The
+[reliability evidence](docs/reliability-evidence.md) maps browser failures to
+the recovery behavior exercised in CI.
 
 ## Target architecture
 
@@ -89,6 +92,14 @@ pnpm install --frozen-lockfile
 pnpm verify
 ```
 
+With PostgreSQL running locally, install Chromium once and execute the browser
+failure scenarios:
+
+```bash
+pnpm exec playwright install chromium
+pnpm test:e2e
+```
+
 Start PostgreSQL, the gateway, and the React application:
 
 ```bash
@@ -113,6 +124,7 @@ and `/ws` carries the ordered collaboration protocol.
 ```text
 apps/gateway/        Fastify, WebSocket, PostgreSQL, and presence coordination
 apps/web/            React release room, browser transport, persistence, and reconnect
+e2e/                 Real-browser concurrency, outage, and replay-gap scenarios
 packages/protocol/   Runtime schemas and release-board transitions
 packages/react-sync/ Tear-free React adapter for the headless sync engine
 packages/sync-engine Framework-independent optimistic state and recovery

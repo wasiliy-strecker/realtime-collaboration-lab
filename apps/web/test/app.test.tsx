@@ -52,6 +52,7 @@ describe('App collaboration flow', () => {
 
     await screen.findByRole('heading', { name: 'Release coordination' })
     expect(fetcher).toHaveBeenCalledWith('/api/demo-session', expect.any(Object))
+    await waitFor(() => expect(FakeBrowserSocket.instances).toHaveLength(1))
     const socket = FakeBrowserSocket.instances[0]!
     act(() => socket.open())
     await act(() => Promise.resolve())

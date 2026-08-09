@@ -72,3 +72,53 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Run PostgreSQL integration tests
         run: pnpm test:integration
+
+  browser:
+    name: Chromium failure scenarios
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17.6-alpine
+        env:
+          POSTGRES_DB: collaboration
+          POSTGRES_PASSWORD: collaboration
+          POSTGRES_USER: collaboration
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U collaboration -d collaboration"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgres://collaboration:collaboration@127.0.0.1:5432/collaboration
+      SESSION_SECRET: ci-browser-session-secret-with-at-least-32-bytes
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.13.1
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Run browser failure scenarios
+        run: pnpm test:e2e
+      - name: Upload browser diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: playwright-failure-report
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 7
