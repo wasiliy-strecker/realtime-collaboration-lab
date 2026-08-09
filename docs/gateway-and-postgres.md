@@ -35,8 +35,10 @@ an explicit `replay-request` can restart delivery after any confirmed sequence.
 ## Connection boundary
 
 `POST /api/demo-sessions` issues a 24-hour HMAC-signed identity in an HTTP-only,
-same-site cookie. The WebSocket handshake requires that cookie and an exact
-allowed origin. Production configuration refuses the checked-in local secret.
+same-site cookie. `GET /api/demo-session` restores its public actor, display
+name, and demo board ID without exposing the token. The WebSocket handshake
+requires that cookie and an exact allowed origin. Production configuration
+refuses the checked-in local secret.
 
 After upgrade, the gateway enforces:
 

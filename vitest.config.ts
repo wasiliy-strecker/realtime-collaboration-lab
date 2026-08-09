@@ -9,8 +9,13 @@ export default defineConfig({
         '**/*.config.ts',
         'apps/gateway/src/main.ts',
         'apps/gateway/src/postgres/**',
+        'apps/web/src/main.tsx',
       ],
-      include: ['packages/*/src/**/*.ts', 'apps/gateway/src/**/*.ts'],
+      include: [
+        'packages/*/src/**/*.ts',
+        'apps/gateway/src/**/*.ts',
+        'apps/web/src/{api,client,storage,transport}.ts',
+      ],
       provider: 'v8',
       reporter: ['text', 'json-summary'],
       thresholds: {

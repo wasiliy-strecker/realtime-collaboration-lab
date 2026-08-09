@@ -10,10 +10,12 @@
     "node": ">=22.12.0"
   },
   "scripts": {
-    "build": "pnpm build:packages && pnpm build:gateway",
+    "build": "pnpm build:packages && pnpm build:gateway && pnpm build:web",
     "build:gateway": "pnpm --filter @realtime-collaboration/gateway build",
-    "build:packages": "pnpm --filter @realtime-collaboration/protocol build && pnpm --filter @realtime-collaboration/sync-engine build",
+    "build:packages": "pnpm --filter @realtime-collaboration/protocol build && pnpm --filter @realtime-collaboration/sync-engine build && pnpm --filter @realtime-collaboration/react-sync build",
+    "build:web": "pnpm --filter @realtime-collaboration/web build",
     "dev:gateway": "pnpm build:packages && pnpm --filter @realtime-collaboration/gateway dev",
+    "dev:web": "pnpm build:packages && pnpm --filter @realtime-collaboration/web dev",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
@@ -21,16 +23,21 @@
     "test:integration": "pnpm build:packages && vitest run --config vitest.integration.config.ts",
     "typecheck": "pnpm build:packages && pnpm typecheck:workspace",
     "typecheck:workspace": "tsc -p tsconfig.json --noEmit && pnpm --recursive --if-present typecheck",
-    "verify": "pnpm format:check && pnpm build:packages && pnpm lint && pnpm typecheck:workspace && pnpm test && pnpm build:gateway"
+    "verify": "pnpm format:check && pnpm build:packages && pnpm lint && pnpm typecheck:workspace && pnpm test && pnpm build:gateway && pnpm build:web"
   },
   "devDependencies": {
     "@eslint/js": "9.39.2",
     "@types/node": "22.20.1",
     "@types/pg": "8.21.0",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
     "@types/ws": "8.18.1",
+    "@testing-library/react": "16.3.2",
+    "@testing-library/user-event": "14.6.3",
     "@vitest/coverage-v8": "4.1.10",
     "eslint": "9.39.2",
     "fast-check": "4.9.0",
+    "jsdom": "30.0.1",
     "prettier": "3.9.5",
     "tsup": "8.5.1",
     "tsx": "4.20.6",

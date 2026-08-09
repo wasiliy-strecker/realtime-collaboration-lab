@@ -7,7 +7,7 @@ import type { RawData } from 'ws'
 import { boardIdSchema } from '@realtime-collaboration/protocol'
 
 import { ConnectionController } from './connection-controller.js'
-import type { CollaborationStore } from './collaboration.js'
+import { demoBoardId, type CollaborationStore } from './collaboration.js'
 import type { CollaborationNotifier } from './postgres/notifier.js'
 import { RoomHub } from './room-hub.js'
 import {
@@ -88,7 +88,12 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<Fastif
       sameSite: 'strict',
       secure: options.secureCookies ?? false,
     })
-    return { actorId: session.identity.actorId, displayName: session.identity.displayName }
+    return sessionPayload(session.identity)
+  })
+
+  app.get('/api/demo-session', (request, reply) => {
+    const identity = authenticateHttp(request, reply, signer)
+    return identity ? sessionPayload(identity) : reply
   })
 
   app.get('/api/boards/:boardId', async (request, reply) => {
@@ -198,6 +203,18 @@ function isAllowedOrigin(origin: string, allowedOrigins: ReadonlySet<string>): b
     return allowedOrigins.has(new URL(origin).origin)
   } catch {
     return false
+  }
+}
+
+function sessionPayload(identity: SessionIdentity): {
+  readonly actorId: string
+  readonly displayName: string
+  readonly boardId: string
+} {
+  return {
+    actorId: identity.actorId,
+    displayName: identity.displayName,
+    boardId: demoBoardId,
   }
 }
 
