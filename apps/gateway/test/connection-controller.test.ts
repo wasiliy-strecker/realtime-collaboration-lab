@@ -4,7 +4,13 @@ import { protocolVersion } from '@realtime-collaboration/protocol'
 
 import { ConnectionController } from '../src/connection-controller.js'
 import { RoomHub } from '../src/room-hub.js'
-import { FakeNotifier, FakeSocket, ids, MemoryCollaborationStore } from './helpers.js'
+import {
+  FakeNotifier,
+  FakeSocket,
+  ids,
+  MemoryCollaborationStore,
+  RecordingObserver,
+} from './helpers.js'
 
 const identity = {
   actorId: ids.actor,
@@ -53,8 +59,9 @@ describe('connection controller', () => {
   it('acknowledges applied and idempotently repeated commands', async () => {
     const store = new MemoryCollaborationStore()
     const socket = new FakeSocket()
-    const hub = new RoomHub(store, new FakeNotifier())
-    const controller = new ConnectionController(store, hub)
+    const observability = new RecordingObserver()
+    const hub = new RoomHub(store, new FakeNotifier(), { observability })
+    const controller = new ConnectionController(store, hub, Date.now, observability)
     const connection = hub.createConnection(socket, identity)
     await hello(controller, connection)
     const command = {
@@ -81,13 +88,19 @@ describe('connection controller', () => {
     expect(socket.messages).toContainEqual(
       expect.objectContaining({ type: 'replay', fromSeq: 0, toSeq: 1 }),
     )
+    expect(
+      observability.events
+        .filter(({ type }) => type === 'command.completed')
+        .map((event) => ('outcome' in event ? event.outcome : null)),
+    ).toEqual(['applied', 'duplicate'])
   })
 
   it('returns safe rejections for invalid commands and missing boards', async () => {
     const store = new MemoryCollaborationStore()
     const socket = new FakeSocket()
-    const hub = new RoomHub(store, new FakeNotifier())
-    const controller = new ConnectionController(store, hub)
+    const observability = new RecordingObserver()
+    const hub = new RoomHub(store, new FakeNotifier(), { observability })
+    const controller = new ConnectionController(store, hub, Date.now, observability)
     const connection = hub.createConnection(socket, identity)
     await hello(controller, connection)
 
@@ -104,6 +117,30 @@ describe('connection controller', () => {
       code: 'target_missing',
       message: 'Board does not exist',
     })
+    expect(observability.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'command.completed', outcome: 'rejected' }),
+        expect.objectContaining({ type: 'command.completed', outcome: 'board_not_found' }),
+      ]),
+    )
+  })
+
+  it('records command failures before preserving the store error', async () => {
+    const store = new MemoryCollaborationStore()
+    const socket = new FakeSocket()
+    const observability = new RecordingObserver()
+    const hub = new RoomHub(store, new FakeNotifier(), { observability })
+    const controller = new ConnectionController(store, hub, Date.now, observability)
+    const connection = hub.createConnection(socket, identity)
+    await hello(controller, connection)
+    vi.spyOn(store, 'applyCommand').mockRejectedValueOnce(new Error('database unavailable'))
+
+    await expect(send(controller, connection, commandFor(ids.operation, ids.card))).rejects.toThrow(
+      'database unavailable',
+    )
+    expect(observability.events).toContainEqual(
+      expect.objectContaining({ type: 'command.completed', outcome: 'error' }),
+    )
   })
 
   it('closes binary, malformed JSON, invalid schema, and cross-board messages', async () => {
@@ -140,8 +177,12 @@ describe('connection controller', () => {
 
   it('rate limits commands with a rejection and other messages by closing the socket', async () => {
     const store = new MemoryCollaborationStore()
-    const hub = new RoomHub(store, new FakeNotifier(), { now: () => 1_000 })
-    const controller = new ConnectionController(store, hub, () => 1_000)
+    const observability = new RecordingObserver()
+    const hub = new RoomHub(store, new FakeNotifier(), {
+      now: () => 1_000,
+      observability,
+    })
+    const controller = new ConnectionController(store, hub, () => 1_000, observability)
     const commandSocket = new FakeSocket()
     const commandConnection = hub.createConnection(commandSocket, identity)
     await hello(controller, commandConnection)
@@ -170,6 +211,18 @@ describe('connection controller', () => {
     })
     await vi.waitFor(() => expect(presenceConnection.phase).toBe('closed'))
     expect(presenceSocket.closes.at(-1)).toMatchObject({ code: 1008 })
+    expect(observability.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'command.completed',
+          outcome: 'rate_limited',
+          durationMs: 0,
+        }),
+        expect.objectContaining({ type: 'rate_limit.reached', messageType: 'command' }),
+        expect.objectContaining({ type: 'rate_limit.reached', messageType: 'presence' }),
+        expect.objectContaining({ type: 'connection.closed', cause: 'rate_limited' }),
+      ]),
+    )
   })
 })
 

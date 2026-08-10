@@ -3,7 +3,13 @@ import { describe, expect, it, vi } from 'vitest'
 import { protocolVersion } from '@realtime-collaboration/protocol'
 
 import { RoomHub } from '../src/room-hub.js'
-import { FakeNotifier, FakeSocket, ids, MemoryCollaborationStore } from './helpers.js'
+import {
+  FakeNotifier,
+  FakeSocket,
+  ids,
+  MemoryCollaborationStore,
+  RecordingObserver,
+} from './helpers.js'
 
 const identity = {
   actorId: ids.actor,
@@ -42,6 +48,7 @@ describe('room hub', () => {
 
   it('replays durable operations and pumps newly committed work in order', async () => {
     const store = new MemoryCollaborationStore()
+    const observability = new RecordingObserver()
     await store.applyCommand({
       boardId: ids.board,
       actorId: ids.actor,
@@ -57,7 +64,7 @@ describe('room hub', () => {
     })
     const notifier = new FakeNotifier()
     const socket = new FakeSocket()
-    const hub = new RoomHub(store, notifier)
+    const hub = new RoomHub(store, notifier, { observability })
     const connection = hub.createConnection(socket, identity)
 
     await hub.join(connection, { boardId: ids.board, clientId: ids.client, lastSeenSeq: 0 })
@@ -82,12 +89,29 @@ describe('room hub', () => {
       expect.objectContaining({ type: 'replay', fromSeq: 1, toSeq: 2 }),
     )
     expect(connection.lastDeliveredSeq).toBe(2)
+    expect(observability.events).toContainEqual(
+      expect.objectContaining({
+        type: 'replay.completed',
+        trigger: 'join',
+        batches: 1,
+        operations: 1,
+      }),
+    )
+    expect(observability.events).toContainEqual(
+      expect.objectContaining({
+        type: 'replay.completed',
+        trigger: 'live_pump',
+        batches: 1,
+        operations: 1,
+      }),
+    )
   })
 
   it('returns an empty caught-up replay and supports an explicit replay request', async () => {
     const store = new MemoryCollaborationStore()
     const socket = new FakeSocket()
-    const hub = new RoomHub(store, new FakeNotifier())
+    const observability = new RecordingObserver()
+    const hub = new RoomHub(store, new FakeNotifier(), { observability })
     const connection = hub.createConnection(socket, identity)
     await hub.join(connection, { boardId: ids.board, clientId: ids.client, lastSeenSeq: 0 })
 
@@ -97,6 +121,17 @@ describe('room hub', () => {
       expect.objectContaining({ fromSeq: 0, toSeq: 0, operations: [], caughtUp: true }),
       expect.objectContaining({ fromSeq: 0, toSeq: 0, operations: [], caughtUp: true }),
     ])
+    expect(observability.events).toContainEqual(
+      expect.objectContaining({ type: 'replay.requested', afterSequence: 0 }),
+    )
+    expect(observability.events).toContainEqual(
+      expect.objectContaining({
+        type: 'replay.completed',
+        trigger: 'explicit',
+        batches: 1,
+        operations: 0,
+      }),
+    )
   })
 
   it('falls back to a snapshot when the client sequence is ahead of the server', async () => {
@@ -136,9 +171,11 @@ describe('room hub', () => {
   it('disconnects slow consumers before growing the socket buffer', async () => {
     const notifier = new FakeNotifier()
     const socket = new FakeSocket()
+    const observability = new RecordingObserver()
     socket.bufferedAmount = 1_025
     const hub = new RoomHub(new MemoryCollaborationStore(), notifier, {
       maxBufferedBytes: 1_024,
+      observability,
     })
     const connection = hub.createConnection(socket, identity)
 
@@ -146,16 +183,22 @@ describe('room hub', () => {
       false,
     )
     await vi.waitFor(() => expect(connection.phase).toBe('closed'))
+    await hub.leave(connection)
     expect(socket.closes[0]).toMatchObject({ code: 1013 })
+    expect(observability.events.filter(({ type }) => type === 'connection.closed')).toEqual([
+      expect.objectContaining({ cause: 'slow_consumer' }),
+    ])
   })
 
   it('expires stale presence and closes heartbeat timeouts', async () => {
     let now = 1_000
     const socket = new FakeSocket()
+    const observability = new RecordingObserver()
     const hub = new RoomHub(new MemoryCollaborationStore(), new FakeNotifier(), {
       now: () => now,
       heartbeatTimeoutMs: 2_000,
       presenceTtlMs: 1_500,
+      observability,
     })
     const connection = hub.createConnection(socket, identity)
     await hub.join(connection, { boardId: ids.board, clientId: ids.client, lastSeenSeq: null })
@@ -171,12 +214,19 @@ describe('room hub', () => {
     hub.heartbeat()
     await vi.waitFor(() => expect(connection.phase).toBe('closed'))
     expect(socket.closes.at(-1)).toMatchObject({ code: 1001 })
+    expect(observability.events).toContainEqual(
+      expect.objectContaining({ type: 'connection.closed', cause: 'heartbeat_timeout' }),
+    )
   })
 
   it('applies remote presence and publishes removal exactly once', async () => {
     const notifier = new FakeNotifier()
     const socket = new FakeSocket()
-    const hub = new RoomHub(new MemoryCollaborationStore(), notifier, { now: () => 1_000 })
+    const observability = new RecordingObserver()
+    const hub = new RoomHub(new MemoryCollaborationStore(), notifier, {
+      now: () => 1_000,
+      observability,
+    })
     const connection = hub.createConnection(socket, identity)
     await hub.join(connection, { boardId: ids.board, clientId: ids.client, lastSeenSeq: null })
 
@@ -197,6 +247,9 @@ describe('room hub', () => {
     await hub.leave(connection)
     await hub.leave(connection)
     expect(notifier.published.filter(({ action }) => action === 'remove')).toHaveLength(1)
+    expect(observability.events.filter(({ type }) => type === 'connection.closed')).toEqual([
+      expect.objectContaining({ cause: 'client_closed' }),
+    ])
   })
 
   it('does not send to sockets that are no longer open', () => {

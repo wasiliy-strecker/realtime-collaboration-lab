@@ -17,6 +17,9 @@ const app = await buildGateway({
   notifier: new PostgresCollaborationNotifier(pool),
   sessionSecret: config.sessionSecret,
   allowedOrigins: config.allowedOrigins,
+  readinessCheck: async () => {
+    await pool.query('SELECT 1')
+  },
   secureCookies: config.nodeEnv === 'production',
   logger: { level: config.logLevel },
 })

@@ -198,6 +198,9 @@ async function startGateway() {
     notifier: new PostgresCollaborationNotifier(pool),
     sessionSecret: 'a-secure-session-secret-with-at-least-32-bytes',
     allowedOrigins: new Set(['http://localhost:5173']),
+    readinessCheck: async () => {
+      await pool.query('SELECT 1')
+    },
     heartbeatIntervalMs: 60_000,
     logger: false,
   })

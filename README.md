@@ -41,6 +41,7 @@ their ownership boundaries.
 - validated local persistence for confirmed state and queued offline intent
 - bounded reconnect with jitter, online recovery, and per-tab client identity
 - an accessible release board with optimistic editing, assignment, readiness, and drag-and-drop
+- Prometheus metrics, structured collaboration events, and database-backed readiness
 - deterministic unit and property tests with enforced coverage thresholds
 - Chromium failure scenarios against the real gateway and PostgreSQL operation log
 
@@ -50,7 +51,8 @@ for the public interfaces and recovery rules, then the
 coordination, and the [React client contract](docs/react-client.md) for browser
 state, transport, and accessibility boundaries. The
 [reliability evidence](docs/reliability-evidence.md) maps browser failures to
-the recovery behavior exercised in CI.
+the recovery behavior exercised in CI. The [observability contract](docs/observability.md)
+defines metric labels, structured events, readiness, and operational queries.
 
 ## Target architecture
 
@@ -118,6 +120,14 @@ Open `http://127.0.0.1:5173`. Vite proxies API and WebSocket traffic to the
 gateway on `http://127.0.0.1:3001`. `POST /api/demo-sessions` creates a signed
 HTTP-only demo session, `GET /api/demo-session` restores its public identity,
 and `/ws` carries the ordered collaboration protocol.
+
+The gateway exposes liveness at `/api/health`, PostgreSQL-backed readiness at
+`/api/ready`, and Prometheus text exposition at `/metrics`:
+
+```bash
+curl http://127.0.0.1:3001/api/ready
+curl http://127.0.0.1:3001/metrics
+```
 
 ## Repository layout
 

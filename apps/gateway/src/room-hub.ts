@@ -6,6 +6,12 @@ import {
 } from '@realtime-collaboration/protocol'
 
 import type { CollaborationStore } from './collaboration.js'
+import {
+  noopGatewayObserver,
+  type ConnectionCloseCause,
+  type GatewayObserver,
+  type ReplayTrigger,
+} from './observability.js'
 import { TokenBucket } from './rate-limit.js'
 import type { SessionIdentity } from './session.js'
 import {
@@ -44,6 +50,7 @@ export class RoomHub {
     string,
     Map<string, { readonly participant: ParticipantPresence; readonly expiresAt: number }>
   >()
+  private readonly observer: GatewayObserver
 
   public constructor(
     private readonly store: CollaborationStore,
@@ -53,14 +60,18 @@ export class RoomHub {
       readonly maxBufferedBytes?: number
       readonly heartbeatTimeoutMs?: number
       readonly presenceTtlMs?: number
+      readonly observability?: GatewayObserver
     } = {},
-  ) {}
+  ) {
+    this.observer = options.observability ?? noopGatewayObserver
+  }
 
   public createConnection(
     socket: GatewayConnection['socket'],
     identity: SessionIdentity,
   ): GatewayConnection {
     const now = this.now()
+    this.observer.observe({ type: 'connection.opened', actorId: identity.actorId })
     return {
       socket,
       identity,
@@ -83,14 +94,19 @@ export class RoomHub {
     },
   ): Promise<boolean> {
     if (connection.phase !== 'awaiting-hello') {
-      this.close(connection, policyViolationCode, 'Hello was already received')
+      this.close(
+        connection,
+        policyViolationCode,
+        'Hello was already received',
+        'protocol_violation',
+      )
       return false
     }
 
     const board = await this.store.getBoard(input.boardId)
 
     if (!board) {
-      this.close(connection, policyViolationCode, 'Board does not exist')
+      this.close(connection, policyViolationCode, 'Board does not exist', 'protocol_violation')
       return false
     }
 
@@ -114,7 +130,7 @@ export class RoomHub {
       connection.lastDeliveredSeq = board.sequence
     } else {
       connection.lastDeliveredSeq = input.lastSeenSeq
-      await this.replayTo(connection, board.sequence, true)
+      await this.replayTo(connection, board.sequence, true, 'join')
     }
 
     if (this.isClosed(connection)) {
@@ -135,12 +151,18 @@ export class RoomHub {
     const board = await this.store.getBoard(connection.boardId)
 
     if (!board) {
-      this.close(connection, policyViolationCode, 'Board does not exist')
+      this.close(connection, policyViolationCode, 'Board does not exist', 'protocol_violation')
       return
     }
 
+    this.observer.observe({
+      type: 'replay.requested',
+      boardId: connection.boardId,
+      clientId: connection.clientId,
+      afterSequence,
+    })
     connection.lastDeliveredSeq = Math.min(afterSequence, board.sequence)
-    await this.replayTo(connection, board.sequence, true)
+    await this.replayTo(connection, board.sequence, true, 'explicit')
   }
 
   public scheduleBoardPump(boardId: string): void {
@@ -157,7 +179,7 @@ export class RoomHub {
     }
 
     if (connection.socket.bufferedAmount > (this.options.maxBufferedBytes ?? 512 * 1_024)) {
-      this.close(connection, slowConsumerCode, 'Client is not consuming messages')
+      this.close(connection, slowConsumerCode, 'Client is not consuming messages', 'slow_consumer')
       return false
     }
 
@@ -199,7 +221,7 @@ export class RoomHub {
 
     for (const connection of this.connections) {
       if (now - connection.lastPongAt > (this.options.heartbeatTimeoutMs ?? 30_000)) {
-        this.close(connection, normalShutdownCode, 'Heartbeat timed out')
+        this.close(connection, normalShutdownCode, 'Heartbeat timed out', 'heartbeat_timeout')
         continue
       }
 
@@ -244,7 +266,10 @@ export class RoomHub {
     this.broadcastPresence(notification.boardId)
   }
 
-  public async leave(connection: GatewayConnection): Promise<void> {
+  public async leave(
+    connection: GatewayConnection,
+    cause: ConnectionCloseCause = 'client_closed',
+  ): Promise<void> {
     if (connection.phase === 'closed') {
       return
     }
@@ -252,6 +277,13 @@ export class RoomHub {
     const { boardId, clientId } = connection
     connection.phase = 'closed'
     this.connections.delete(connection)
+    this.observer.observe({
+      type: 'connection.closed',
+      actorId: connection.identity.actorId,
+      boardId,
+      clientId,
+      cause,
+    })
 
     if (boardId && clientId) {
       const notification: PresenceNotification = { action: 'remove', boardId, clientId }
@@ -260,13 +292,18 @@ export class RoomHub {
     }
   }
 
-  public close(connection: GatewayConnection, code: number, reason: string): void {
+  public close(
+    connection: GatewayConnection,
+    code: number,
+    reason: string,
+    cause: ConnectionCloseCause,
+  ): void {
     if (connection.phase === 'closed') {
       return
     }
 
     connection.socket.close(code, reason)
-    void this.leave(connection).catch(() => undefined)
+    void this.leave(connection, cause).catch(() => undefined)
   }
 
   private schedulePump(connection: GatewayConnection): void {
@@ -279,16 +316,17 @@ export class RoomHub {
         const board = await this.store.getBoard(connection.boardId)
 
         if (board) {
-          await this.replayTo(connection, board.sequence, false)
+          await this.replayTo(connection, board.sequence, false, 'live_pump')
         }
       })
-      .catch(() => this.close(connection, normalShutdownCode, 'Replay failed'))
+      .catch(() => this.close(connection, normalShutdownCode, 'Replay failed', 'replay_failed'))
   }
 
   private async replayTo(
     connection: GatewayConnection,
     targetSequence: number,
     emitEmptyReplay: boolean,
+    trigger: ReplayTrigger,
   ): Promise<void> {
     const boardId = connection.boardId
 
@@ -296,7 +334,9 @@ export class RoomHub {
       return
     }
 
-    let sentBatch = false
+    const startedAt = this.now()
+    let sentBatches = 0
+    let sentOperations = 0
 
     while (connection.lastDeliveredSeq < targetSequence && connection.phase !== 'closed') {
       const fromSeq = connection.lastDeliveredSeq
@@ -319,23 +359,53 @@ export class RoomHub {
           caughtUp,
         })
       ) {
+        this.recordReplay(connection, trigger, sentBatches, sentOperations, startedAt)
         return
       }
 
       connection.lastDeliveredSeq = toSeq
-      sentBatch = true
+      sentBatches += 1
+      sentOperations += operations.length
     }
 
-    if (emitEmptyReplay && !sentBatch && connection.phase !== 'closed') {
-      this.send(connection, {
-        type: 'replay',
-        protocolVersion,
-        fromSeq: connection.lastDeliveredSeq,
-        toSeq: connection.lastDeliveredSeq,
-        operations: [],
-        caughtUp: true,
-      })
+    if (emitEmptyReplay && sentBatches === 0 && connection.phase !== 'closed') {
+      if (
+        this.send(connection, {
+          type: 'replay',
+          protocolVersion,
+          fromSeq: connection.lastDeliveredSeq,
+          toSeq: connection.lastDeliveredSeq,
+          operations: [],
+          caughtUp: true,
+        })
+      ) {
+        sentBatches += 1
+      }
     }
+
+    this.recordReplay(connection, trigger, sentBatches, sentOperations, startedAt)
+  }
+
+  private recordReplay(
+    connection: GatewayConnection,
+    trigger: ReplayTrigger,
+    batches: number,
+    operations: number,
+    startedAt: number,
+  ): void {
+    if (batches === 0) {
+      return
+    }
+
+    this.observer.observe({
+      type: 'replay.completed',
+      boardId: connection.boardId!,
+      clientId: connection.clientId,
+      trigger,
+      batches,
+      operations,
+      durationMs: this.now() - startedAt,
+    })
   }
 
   private broadcastPresence(boardId: string): void {

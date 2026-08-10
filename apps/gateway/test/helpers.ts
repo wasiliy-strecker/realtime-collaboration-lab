@@ -18,6 +18,7 @@ import type {
   CollaborationNotifier,
   PresenceNotification,
 } from '../src/postgres/notifier.js'
+import type { GatewayObservabilityEvent, GatewayObserver } from '../src/observability.js'
 import type { GatewaySocket } from '../src/room-hub.js'
 
 export const ids = {
@@ -123,5 +124,13 @@ export class FakeSocket implements GatewaySocket {
   public close(code?: number, reason?: string): void {
     this.readyState = 3
     this.closes.push({ ...(code === undefined ? {} : { code }), ...(reason ? { reason } : {}) })
+  }
+}
+
+export class RecordingObserver implements GatewayObserver {
+  public readonly events: GatewayObservabilityEvent[] = []
+
+  public observe(event: GatewayObservabilityEvent): void {
+    this.events.push(event)
   }
 }

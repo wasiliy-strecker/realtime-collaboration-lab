@@ -21,6 +21,9 @@ describe('Fastify gateway', () => {
     const app = await createApp(notifier)
 
     const health = await app.inject({ method: 'GET', url: '/api/health' })
+    const ready = await app.inject({ method: 'GET', url: '/api/ready' })
+    notifier.handlers?.listenerError?.(new Error('listener unavailable'))
+    const metrics = await app.inject({ method: 'GET', url: '/metrics' })
     const invalid = await app.inject({
       method: 'POST',
       url: '/api/demo-sessions',
@@ -40,6 +43,10 @@ describe('Fastify gateway', () => {
     const anonymous = await app.inject({ method: 'GET', url: '/api/demo-session' })
 
     expect(health.json()).toEqual({ status: 'ok' })
+    expect(ready.json()).toEqual({ status: 'ready' })
+    expect(metrics.headers['content-type']).toContain('text/plain')
+    expect(metrics.body).toContain('realtime_collaboration_active_connections 0')
+    expect(metrics.body).toContain('realtime_collaboration_notification_errors_total 1')
     expect(invalid).toMatchObject({ statusCode: 400 })
     expect(invalid.headers['content-type']).toContain('application/problem+json')
     expect(session).toMatchObject({ statusCode: 200 })
@@ -59,6 +66,19 @@ describe('Fastify gateway', () => {
     await app.close()
     expect(notifier.stopCalls).toBe(1)
     apps.splice(apps.indexOf(app), 1)
+  })
+
+  it('reports database readiness failure without exposing its cause', async () => {
+    const app = await createApp(new FakeNotifier(), new MemoryCollaborationStore(), () =>
+      Promise.reject(new Error('private database hostname')),
+    )
+
+    const response = await app.inject({ method: 'GET', url: '/api/ready' })
+
+    expect(response.statusCode).toBe(503)
+    expect(response.headers['content-type']).toContain('application/problem+json')
+    expect(response.json()).toMatchObject({ code: 'not_ready', status: 503 })
+    expect(response.body).not.toContain('private database hostname')
   })
 
   it('protects board snapshots and bounded operation replay', async () => {
@@ -170,12 +190,14 @@ describe('Fastify gateway', () => {
 async function createApp(
   notifier: FakeNotifier,
   store = new MemoryCollaborationStore(),
+  readinessCheck: () => Promise<void> = () => Promise.resolve(),
 ): Promise<Awaited<ReturnType<typeof buildGateway>>> {
   const app = await buildGateway({
     store,
     notifier,
     sessionSecret: secret,
     allowedOrigins: new Set(['http://localhost:5173']),
+    readinessCheck,
     heartbeatIntervalMs: 60_000,
     logger: false,
   })
