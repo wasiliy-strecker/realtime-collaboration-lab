@@ -8,6 +8,7 @@ import { boardIdSchema } from '@realtime-collaboration/protocol'
 
 import { ConnectionController } from './connection-controller.js'
 import { demoBoardId, type CollaborationStore } from './collaboration.js'
+import { createPrometheusGatewayObservability, type GatewayObservability } from './observability.js'
 import type { CollaborationNotifier } from './postgres/notifier.js'
 import { RoomHub } from './room-hub.js'
 import {
@@ -31,6 +32,7 @@ export interface BuildGatewayOptions {
   readonly notifier: CollaborationNotifier
   readonly sessionSecret: string
   readonly allowedOrigins: ReadonlySet<string>
+  readonly readinessCheck: () => Promise<void>
   readonly secureCookies?: boolean
   readonly logger?: boolean | { readonly level: string }
   readonly heartbeatIntervalMs?: number
@@ -38,10 +40,12 @@ export interface BuildGatewayOptions {
   readonly maxBufferedBytes?: number
   readonly now?: () => number
   readonly sessionSigner?: SessionSigner
+  readonly observability?: GatewayObservability
 }
 
 export async function buildGateway(options: BuildGatewayOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger: options.logger ?? false })
+  const observability = options.observability ?? createPrometheusGatewayObservability(app.log)
   const signer =
     options.sessionSigner ??
     createSessionSigner({
@@ -52,15 +56,21 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<Fastif
     ...(options.now ? { now: options.now } : {}),
     ...(options.heartbeatTimeoutMs ? { heartbeatTimeoutMs: options.heartbeatTimeoutMs } : {}),
     ...(options.maxBufferedBytes ? { maxBufferedBytes: options.maxBufferedBytes } : {}),
+    observability,
   })
-  const controller = new ConnectionController(options.store, hub, options.now ?? Date.now)
+  const controller = new ConnectionController(
+    options.store,
+    hub,
+    options.now ?? Date.now,
+    observability,
+  )
 
   await app.register(cookie)
   await app.register(websocket, { options: { maxPayload: 16 * 1_024 } })
   await options.notifier.start({
     operationCommitted: (boardId) => hub.scheduleBoardPump(boardId),
     presenceChanged: (notification) => hub.applyPresence(notification),
-    listenerError: (error) => app.log.error({ error }, 'Collaboration notification failed'),
+    listenerError: (error) => observability.observe({ type: 'notification.failed', error }),
   })
 
   const heartbeat = setInterval(() => hub.heartbeat(), options.heartbeatIntervalMs ?? 15_000)
@@ -72,6 +82,20 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<Fastif
   })
 
   app.get('/api/health', () => ({ status: 'ok' }))
+
+  app.get('/api/ready', async (_request, reply) => {
+    try {
+      await options.readinessCheck()
+      return { status: 'ready' }
+    } catch (error) {
+      app.log.warn({ event: 'readiness.failed', error }, 'Gateway readiness check failed')
+      return problem(reply, 503, 'not_ready', 'Gateway is not ready')
+    }
+  })
+
+  app.get('/metrics', async (_request, reply) =>
+    reply.type(observability.contentType).send(await observability.metrics()),
+  )
 
   app.post('/api/demo-sessions', async (request, reply) => {
     const body = sessionRequestSchema.safeParse(request.body)
@@ -165,7 +189,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<Fastif
           .then(() => controller.handle(connection, payload, isBinary))
           .catch((error: unknown) => {
             app.log.warn({ error }, 'Closing invalid collaboration connection')
-            hub.close(connection, 1008, 'Invalid collaboration message')
+            hub.close(connection, 1008, 'Invalid collaboration message', 'protocol_violation')
           })
       })
       socket.on('close', () => {
