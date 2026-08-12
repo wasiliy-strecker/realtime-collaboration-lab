@@ -10,11 +10,13 @@ export default defineConfig({
         'apps/gateway/src/main.ts',
         'apps/gateway/src/postgres/**',
         'apps/web/src/main.tsx',
+        'performance/src/run.ts',
       ],
       include: [
         'packages/*/src/**/*.ts',
         'apps/gateway/src/**/*.ts',
         'apps/web/src/{api,client,storage,transport}.ts',
+        'performance/src/statistics.ts',
       ],
       provider: 'v8',
       reporter: ['text', 'json-summary'],
@@ -25,7 +27,12 @@ export default defineConfig({
         statements: 90,
       },
     },
-    include: ['apps/**/*.test.ts', 'apps/**/*.test.tsx', 'packages/**/*.test.ts'],
+    include: [
+      'apps/**/*.test.ts',
+      'apps/**/*.test.tsx',
+      'packages/**/*.test.ts',
+      'performance/**/*.test.ts',
+    ],
     exclude: ['**/*.integration.test.ts', '**/dist/**', '**/node_modules/**'],
   },
 })
