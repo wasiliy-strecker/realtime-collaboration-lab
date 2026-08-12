@@ -8,4 +8,5 @@ coverage/
 *.log
 playwright-report/
 test-results/
+performance-results/
 .vite/

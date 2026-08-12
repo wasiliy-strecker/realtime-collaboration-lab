@@ -19,6 +19,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
+    "performance:smoke": "pnpm build:packages && tsx performance/src/run.ts",
     "test": "vitest run --coverage",
     "test:e2e": "pnpm build:packages && playwright test",
     "test:integration": "pnpm build:packages && vitest run --config vitest.integration.config.ts",
@@ -46,6 +47,7 @@
     "tsx": "4.20.6",
     "typescript": "5.9.3",
     "typescript-eslint": "8.64.0",
-    "vitest": "4.1.10"
+    "vitest": "4.1.10",
+    "ws": "8.21.3"
   }
 }

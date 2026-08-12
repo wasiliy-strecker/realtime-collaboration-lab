@@ -44,6 +44,7 @@ their ownership boundaries.
 - Prometheus metrics, structured collaboration events, and database-backed readiness
 - deterministic unit and property tests with enforced coverage thresholds
 - Chromium failure scenarios against the real gateway and PostgreSQL operation log
+- a reproducible WebSocket load smoke for latency, convergence, and load shedding
 
 Read the [protocol and sync engine contract](docs/protocol-and-sync-engine.md)
 for the public interfaces and recovery rules, then the
@@ -53,6 +54,8 @@ state, transport, and accessibility boundaries. The
 [reliability evidence](docs/reliability-evidence.md) maps browser failures to
 the recovery behavior exercised in CI. The [observability contract](docs/observability.md)
 defines metric labels, structured events, readiness, and operational queries.
+The [performance evidence](docs/performance.md) defines the repeatable load
+profile, thresholds, and limits of the resulting measurements.
 
 ## Target architecture
 
@@ -129,12 +132,19 @@ curl http://127.0.0.1:3001/api/ready
 curl http://127.0.0.1:3001/metrics
 ```
 
+With the gateway running against PostgreSQL, execute the same load smoke as CI:
+
+```bash
+pnpm performance:smoke
+```
+
 ## Repository layout
 
 ```text
 apps/gateway/        Fastify, WebSocket, PostgreSQL, and presence coordination
 apps/web/            React release room, browser transport, persistence, and reconnect
 e2e/                 Real-browser concurrency, outage, and replay-gap scenarios
+performance/         Protocol-aware load harness and deterministic statistics
 packages/protocol/   Runtime schemas and release-board transitions
 packages/react-sync/ Tear-free React adapter for the headless sync engine
 packages/sync-engine Framework-independent optimistic state and recovery

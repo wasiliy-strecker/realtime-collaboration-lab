@@ -73,6 +73,60 @@ jobs:
       - name: Run PostgreSQL integration tests
         run: pnpm test:integration
 
+  performance:
+    name: Realtime load smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17.6-alpine
+        env:
+          POSTGRES_DB: collaboration
+          POSTGRES_PASSWORD: collaboration
+          POSTGRES_USER: collaboration
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U collaboration -d collaboration"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgres://collaboration:collaboration@127.0.0.1:5432/collaboration
+      SESSION_SECRET: ci-performance-session-secret-with-at-least-32-bytes
+      LOG_LEVEL: warn
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.13.1
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run realtime load smoke
+        run: |
+          mkdir -p performance-results
+          pnpm build:packages
+          pnpm build:gateway
+          node apps/gateway/dist/main.js > performance-results/gateway.log 2>&1 &
+          gateway_pid=$!
+          trap 'kill "$gateway_pid" 2>/dev/null || true' EXIT
+          pnpm performance:smoke
+      - name: Upload performance evidence
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: realtime-load-evidence
+          path: performance-results/
+          if-no-files-found: warn
+          retention-days: 14
+
   browser:
     name: Chromium failure scenarios
     runs-on: ubuntu-latest
