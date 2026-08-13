@@ -120,7 +120,7 @@ jobs:
           pnpm performance:smoke
       - name: Upload performance evidence
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: realtime-load-evidence
           path: performance-results/
@@ -168,7 +168,7 @@ jobs:
         run: pnpm test:e2e
       - name: Upload browser diagnostics
         if: failure()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-failure-report
           path: |
