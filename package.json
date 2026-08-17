@@ -28,7 +28,7 @@
     "verify": "pnpm format:check && pnpm build:packages && pnpm lint && pnpm typecheck:workspace && pnpm test && pnpm build:gateway && pnpm build:web"
   },
   "devDependencies": {
-    "@eslint/js": "9.39.2",
+    "@eslint/js": "9.39.5",
     "@playwright/test": "1.62.1",
     "@realtime-collaboration/protocol": "workspace:*",
     "@types/node": "22.20.1",
@@ -37,16 +37,16 @@
     "@types/react-dom": "19.2.4",
     "@types/ws": "8.18.1",
     "@testing-library/react": "16.3.2",
-    "@testing-library/user-event": "14.6.3",
+    "@testing-library/user-event": "14.6.4",
     "@vitest/coverage-v8": "4.1.10",
-    "eslint": "9.39.2",
+    "eslint": "9.39.5",
     "fast-check": "4.9.0",
     "jsdom": "30.0.1",
-    "prettier": "3.9.5",
+    "prettier": "3.9.6",
     "tsup": "8.5.1",
-    "tsx": "4.20.6",
+    "tsx": "4.23.12",
     "typescript": "5.9.3",
-    "typescript-eslint": "8.64.0",
+    "typescript-eslint": "8.67.0",
     "vitest": "4.1.10",
     "ws": "8.21.3"
   }
