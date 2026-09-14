@@ -17,7 +17,7 @@
     "@realtime-collaboration/protocol": "workspace:*",
     "@realtime-collaboration/react-sync": "workspace:*",
     "@realtime-collaboration/sync-engine": "workspace:*",
-    "react": "19.2.8",
+    "react": "19.3.0",
     "react-dom": "19.2.8",
     "zod": "4.4.3"
   },
